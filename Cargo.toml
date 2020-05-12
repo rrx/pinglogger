@@ -8,8 +8,10 @@ edition = "2018"
 
 [dependencies]
 mio = { version = "0.7", features = ["os-poll", "tcp", "udp", "uds", "os-util"] }
-socket2 = "0.3"
-pnet = "0.25.0"
+socket2 = "0.3.12"
+pnet = "0.26.0"
+#pnet = {git = "https://github.com/rrx/libpnet/", branch = "ipv6-layer3"}
+
 itertools = "0.9.0"
 tokio = { version = "0.2.18", features = ["full"] }
 futures = "0.3"
@@ -17,8 +19,14 @@ dns-lookup = "1.0.2"
 clap = "2.33.0"
 dipstick = "0.7.13"
 log = "0.4.8"
-pretty_env_logger = "0.4.0"
+#pretty_env_logger = "0.4.0"
 crossbeam-channel = "0.4.2"
+simple_logger = "1.6.0"
+#icmp = "0.3.0"
+#smoltcp = "0.6.0"
 
 [[bin]]
 name = "pinglogger"
+
+[[bin]]
+name = "ping4"

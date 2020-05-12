@@ -106,8 +106,8 @@ impl Socket {
         self.socket.flush()
     }
 
-    pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        self.socket.recv(buf)
+    pub fn recv(&self, buf: &mut [u8]) -> io::Result<(usize, SockAddr)> {
+        self.socket.recv_from(buf)
     }
 }
 

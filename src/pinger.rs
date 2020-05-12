@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::process;
 use std::collections::HashSet;
-use std::convert::TryInto;
 
 use pnet::packet::icmp::{echo_reply,IcmpType};
 use std::os::unix::io::{AsRawFd};
@@ -10,19 +9,17 @@ use std::os::unix::io::{AsRawFd};
 use mio::{Events, Interest, Poll, Token};
 use socket2::{Domain, Protocol, Type};
 use mio::unix::SourceFd;
-//use pnet::packet::icmp;
 use pnet::packet::icmpv6::{Icmpv6Packet,Icmpv6Type};
 use pnet::packet::ipv4::Ipv4Packet;
 use pnet::packet::ipv6::Ipv6Packet;
 use pnet::packet::Packet;
 use itertools::Itertools;
 
-use std::time::{Instant, Duration, SystemTime};
-use std::net::{SocketAddr};
+use std::time::Instant;
+use std::net::SocketAddr;
 use dns_lookup::lookup_host;
 use log::*;
-//use crossbeam_channel::bounded;
-use crossbeam_channel::{Sender, Receiver};
+use crossbeam_channel::Sender;
 
 // Some tokens to allow us to identify which event is for which socket.
 const PING: Token = Token(2);
@@ -55,7 +52,6 @@ pub enum UniPacket {
         t: u128
     },
     RecvPacket {
-        //addr: String,
         seq: u16,
         ident: u16,
         t: u128,
@@ -89,12 +85,6 @@ impl Default for PingTargets {
 }
 
 impl PingTargets {
-    //pub fn wait(&self, r: &Receiver<UniPacket>) {
-        //r.iter().for_each(|x| {
-            //println!("{:?}",x);
-        //});
-    //}
-
     pub fn start(&mut self) {
         self.start_instant = Instant::now();
     }
@@ -128,7 +118,7 @@ impl PingTargets {
         }
         s.send(UniPacket::SendPacket { 
             host: site.host.clone(),
-            addr: site.sock_addr.to_string(),
+            addr: site.sock_addr.ip().to_string(),
             seq,
             ident: site.ident,
             t: now
@@ -144,33 +134,37 @@ impl PingTargets {
         // site.socket.flush().unwrap();
     }
 
-    fn handle_icmpv6(&self, packet: &[u8], num: usize, s: &Sender<UniPacket>) {
+    pub fn handle_icmpv6(&self, packet: &[u8], num: usize, s: &Sender<UniPacket>) {
         //debug!("Packet {:02x}", packet[..num].iter().format(" "));
+        if let Some(ipv6) = Ipv6Packet::new(&packet[..num]) {
+            debug!("IPV6 {:?} {:02x}", ipv6, ipv6.payload().iter().format(" "));
+        }
 
         if let Some(icmpv6) = Icmpv6Packet::new(&packet[..num]) {
             if icmpv6.get_icmpv6_type() == Icmpv6Type(129) {
-                //debug!("ICMPV6 Reply {:?} {:02x}", icmpv6, icmpv6.payload().iter().format(" "));
+                debug!("ICMPV6 Reply {:?} {:02x}", icmpv6, packet[..num].iter().format(" "));
 
                 if let Some(reply) = echo_reply::EchoReplyPacket::new(&packet[..num]) {
                     //if verbose > 0 {
-                    ////debug!("ECHO {:?} {:02x}", reply, reply.payload().iter().format(" "));
+                    debug!("ECHO {:?} {:02x}", reply, reply.payload().iter().format(" "));
                     //}
                     match self.sources.get(&reply.get_identifier()) {
-                        Some(addr) => {
+                        Some(_) => {
                             //debug!("Ident {:?}", reply.get_identifier());
                             //if reply.get_identifier() == ident {
-                            let (int_bytes, _) = reply.payload().split_at(std::mem::size_of::<u128>());
-                            let x = u128::from_be_bytes(int_bytes.try_into().unwrap());
+                            //let (int_bytes, _) = reply.payload().split_at(std::mem::size_of::<u128>());
+                            //let x = u128::from_be_bytes(int_bytes.try_into().unwrap());
                             //debug!("{:?}", x);
-                            let e = self.start_instant.elapsed().checked_sub(Duration::from_nanos(x as u64));
+                            //let e = self.start_instant.elapsed().checked_sub(Duration::from_nanos(x as u64));
 
                             let now: u128 = self.start_instant.elapsed().as_nanos();
-                            let size = num;
+                            //let size = num;
                             // let source = ipv6_packet.get_source();
                             let seq = reply.get_sequence_number();
-                            // let ttl = ipv6_packet.get_hop_limit();
+                            //reply.get_hop_limit
+                            let ttl = 0;//reply.get_hop_limit();
                             // //debug!("{:?}", (reply.get_identifier(), seq, x, e));
-                            let t: f64 = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_micros() as f64;
+                            //let t: f64 = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_micros() as f64;
                             // debug!("[{:.6}] {} bytes from {} ({}): icmp_seq={} ttl={} time={:?}", t/1000., size, addr, source, seq, ttl, e);
                             //println!("[{:.6}] {} bytes from {}: icmp_seq={} time={:?}", t/1000_000., size, addr, seq, e);
                             s.send(UniPacket::RecvPacket { 
@@ -178,7 +172,7 @@ impl PingTargets {
                                 seq,
                                 ident: reply.get_identifier(),
                                 t: now,
-                                ttl: 0,
+                                ttl,
                                 size: num
                             }).unwrap();
                             }
@@ -223,7 +217,7 @@ impl PingTargets {
 
     }
 
-    fn handle_icmpv4(&self, packet: &[u8], num: usize, s: &Sender<UniPacket>) {
+    pub fn handle_icmpv4(&self, packet: &[u8], num: usize, s: &Sender<UniPacket>) {
         if let Some(ipv4_packet) = Ipv4Packet::new(&packet[..num]) {
             //debug!("IPV4-payload {:02x}", ipv4_packet.payload().iter().format(" "));
 
@@ -244,21 +238,21 @@ impl PingTargets {
                 }
 
                 match self.sources.get(&reply.get_identifier()) {
-                    Some(addr) => {
+                    Some(_) => {
                         //if reply.get_identifier() == ident {
-                        let (int_bytes, _) = reply.payload().split_at(std::mem::size_of::<u128>());
-                        let x = u128::from_be_bytes(int_bytes.try_into().unwrap());
-                        let e = self.start_instant.elapsed().checked_sub(Duration::from_nanos(x as u64));
+                        //let (int_bytes, _) = reply.payload().split_at(std::mem::size_of::<u128>());
+                        //let x = u128::from_be_bytes(int_bytes.try_into().unwrap());
+                        //let e = self.start_instant.elapsed().checked_sub(Duration::from_nanos(x as u64));
                         //}
 
                         //64 bytes from sea15s12-in-x0e.1e100.net (2607:f8b0:400a:809::200e): icmp_seq=2 ttl=57 time=6.26 ms
                         let size = ipv4_packet.payload().len();
-                        let source = ipv4_packet.get_source();
+                        //let source = ipv4_packet.get_source();
                         let seq = reply.get_sequence_number();
                         let ttl = ipv4_packet.get_ttl();
                         let now: u128 = self.start_instant.elapsed().as_nanos();
                         //debug!("{:?}", (reply.get_identifier(), seq, x, e));
-                        let t: f64 = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_micros() as f64;
+                        //let t: f64 = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_micros() as f64;
                         //println!("[{:.6}] {} bytes from {} ({}): icmp_seq={} ttl={} time={:?}", t/1000_000., size, addr, source, seq, ttl, e);
                         s.send(UniPacket::RecvPacket { 
                             //addr: source.to_string(),
@@ -296,16 +290,17 @@ impl PingTargets {
                 poll.poll(&mut events, None).unwrap();
 
                 for event in events.iter() {
+                    //debug!("{:?}", event);
                     match event.token() {
                         PING_V6 => {
                             loop {
                                 let mut packet = [0u8;2048]; 
                                 match self.ping_v6.recv(&mut packet) {
-                                    Ok(num) => {
+                                    Ok((num, addr)) => {
+                                        debug!("Addr {:?}", addr);
                                         self.handle_icmpv6(&packet, num, &s);
                                     }
                                     Err(_) => {
-                                        //error!("Error: {:?}", e);
                                         break;
                                     }
                                 }
@@ -316,11 +311,11 @@ impl PingTargets {
                             loop {
                                 let mut packet = [0u8;2048]; 
                                 match self.ping.recv(&mut packet) {
-                                    Ok(num) => {                         
+                                    Ok((num, addr)) => {
+                                        debug!("Addr {:?}", addr);
                                         self.handle_icmpv4(&packet, num, &s);
                                     },
                                     Err(_) => {
-                                        //debug!("Drained: {:?}", e);
                                         break;
                                     }
                                 }

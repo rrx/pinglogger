@@ -1,5 +1,6 @@
 pub mod icmp;
 pub mod pinger;
+pub mod cli;
 
 #[cfg(test)]
 mod tests {
