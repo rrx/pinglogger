@@ -19,14 +19,10 @@ dns-lookup = "1.0.2"
 clap = "2.33.0"
 dipstick = "0.7.13"
 log = "0.4.8"
-#pretty_env_logger = "0.4.0"
 crossbeam-channel = "0.4.2"
 simple_logger = "1.6.0"
-#icmp = "0.3.0"
-#smoltcp = "0.6.0"
+nix = "0.17.0"
 
 [[bin]]
 name = "pinglogger"
 
-[[bin]]
-name = "ping4"

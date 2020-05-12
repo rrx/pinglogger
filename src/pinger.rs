@@ -3,7 +3,7 @@ use std::error::Error;
 use std::process;
 use std::collections::HashSet;
 
-use pnet::packet::icmp::{echo_reply,IcmpType};
+use pnet::packet::icmp::echo_reply;
 use std::os::unix::io::{AsRawFd};
 
 use mio::{Events, Interest, Poll, Token};
@@ -123,19 +123,9 @@ impl PingTargets {
             ident: site.ident,
             t: now
         }).unwrap();
-
-        //let packet = echo_request::EchoRequestPacket::new(&ping_buffer);
-        // debug!("{:?}", packet);
-
-        // if verbose > 0 {
-        //     debug!("send: {} {:02x}", target, ping_buffer.iter().format(" "));
-        // }
-        // site.socket.send_to(&ping_buffer, &target.clone().into()).unwrap();
-        // site.socket.flush().unwrap();
     }
 
     pub fn handle_icmpv6(&self, packet: &[u8], num: usize, s: &Sender<UniPacket>) {
-        //debug!("Packet {:02x}", packet[..num].iter().format(" "));
         if let Some(ipv6) = Ipv6Packet::new(&packet[..num]) {
             debug!("IPV6 {:?} {:02x}", ipv6, ipv6.payload().iter().format(" "));
         }
@@ -145,72 +135,44 @@ impl PingTargets {
                 debug!("ICMPV6 Reply {:?} {:02x}", icmpv6, packet[..num].iter().format(" "));
 
                 if let Some(reply) = echo_reply::EchoReplyPacket::new(&packet[..num]) {
-                    //if verbose > 0 {
                     debug!("ECHO {:?} {:02x}", reply, reply.payload().iter().format(" "));
-                    //}
                     match self.sources.get(&reply.get_identifier()) {
                         Some(_) => {
-                            //debug!("Ident {:?}", reply.get_identifier());
-                            //if reply.get_identifier() == ident {
-                            //let (int_bytes, _) = reply.payload().split_at(std::mem::size_of::<u128>());
-                            //let x = u128::from_be_bytes(int_bytes.try_into().unwrap());
-                            //debug!("{:?}", x);
-                            //let e = self.start_instant.elapsed().checked_sub(Duration::from_nanos(x as u64));
-
                             let now: u128 = self.start_instant.elapsed().as_nanos();
-                            //let size = num;
-                            // let source = ipv6_packet.get_source();
                             let seq = reply.get_sequence_number();
-                            //reply.get_hop_limit
                             let ttl = 0;//reply.get_hop_limit();
-                            // //debug!("{:?}", (reply.get_identifier(), seq, x, e));
-                            //let t: f64 = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_micros() as f64;
-                            // debug!("[{:.6}] {} bytes from {} ({}): icmp_seq={} ttl={} time={:?}", t/1000., size, addr, source, seq, ttl, e);
-                            //println!("[{:.6}] {} bytes from {}: icmp_seq={} time={:?}", t/1000_000., size, addr, seq, e);
                             s.send(UniPacket::RecvPacket { 
-                                //addr: "".to_string(),//",//"Recv v6".to_string(),
                                 seq,
                                 ident: reply.get_identifier(),
                                 t: now,
                                 ttl,
                                 size: num
                             }).unwrap();
-                            }
+                        }
                         _ => {}
-                        }
                     }
-
-                } else {
-                    return;
-                }
-            }
-
-            if let Some(ipv6_packet) = Ipv6Packet::new(&packet[..num]) {
-                debug!("IPV6-payload {:02x}", ipv6_packet.payload().iter().format(" "));
-                debug!("IPV6 {:?}", ipv6_packet);
-                if self.addrs.contains(&ipv6_packet.get_source().into()) {
-                    //debug!("v6 {:02x}", packet.iter().format(" "));
-                    if let Some(icmpv6) = Icmpv6Packet::new(&packet[..num]) {
-                        if icmpv6.get_icmpv6_type() == Icmpv6Type(129) {
-                            //debug!("ICMPV6 Reply {:?} {:02x}", icmpv6, icmpv6.payload().iter().format(" "));
-                        } else {
-                            //debug!("OOB ICMPV6({}) {:?} {:02x}", icmpv6.get_icmpv6_type().0, icmpv6, icmpv6.payload().iter().format(" "));
-                            return;
-                        }
-                    }
-
-                    if let Some(reply) = echo_reply::EchoReplyPacket::new(&packet[..num]) {
-                        //if verbose > 0 {
-                        debug!("ECHO {:?} {:02x}", reply, reply.payload().iter().format(" "));
-                        //}
-                        // } else {
-                        //     debug!("ECHO {:?}", reply);
-                        // }
-
                 }
 
             } else {
-                //debug!("OOB {:?}", ipv6_packet);
+                return;
+            }
+        }
+
+        if let Some(ipv6_packet) = Ipv6Packet::new(&packet[..num]) {
+            debug!("IPV6-payload {:02x}", ipv6_packet.payload().iter().format(" "));
+            debug!("IPV6 {:?}", ipv6_packet);
+            if self.addrs.contains(&ipv6_packet.get_source().into()) {
+                if let Some(icmpv6) = Icmpv6Packet::new(&packet[..num]) {
+                    if icmpv6.get_icmpv6_type() == Icmpv6Type(129) {
+                    } else {
+                        return;
+                    }
+                }
+
+                if let Some(reply) = echo_reply::EchoReplyPacket::new(&packet[..num]) {
+                    debug!("ECHO {:?} {:02x}", reply, reply.payload().iter().format(" "));
+                }
+            } else {
                 return;
             }
         }
@@ -219,43 +181,14 @@ impl PingTargets {
 
     pub fn handle_icmpv4(&self, packet: &[u8], num: usize, s: &Sender<UniPacket>) {
         if let Some(ipv4_packet) = Ipv4Packet::new(&packet[..num]) {
-            //debug!("IPV4-payload {:02x}", ipv4_packet.payload().iter().format(" "));
-
-            if self.addrs.contains(&ipv4_packet.get_source().into()) {
-                //debug!("IPV4 {:?}", ipv4_packet);
-            } else {
-                //debug!("OOB {:?}", ipv4_packet);
-                //return Ok(());
-            }
-
             if let Some(reply) = echo_reply::EchoReplyPacket::new(ipv4_packet.payload()) { //&packet[..num]) {
-                //debug!("Ident {:?}", reply.get_identifier());
-                if reply.get_icmp_type() == IcmpType(0) {
-
-                } else {
-                    //debug!("OOB ECHO {:?} {:02x}", reply, reply.payload().iter().format(" "));
-                    //return Ok(());
-                }
-
                 match self.sources.get(&reply.get_identifier()) {
                     Some(_) => {
-                        //if reply.get_identifier() == ident {
-                        //let (int_bytes, _) = reply.payload().split_at(std::mem::size_of::<u128>());
-                        //let x = u128::from_be_bytes(int_bytes.try_into().unwrap());
-                        //let e = self.start_instant.elapsed().checked_sub(Duration::from_nanos(x as u64));
-                        //}
-
-                        //64 bytes from sea15s12-in-x0e.1e100.net (2607:f8b0:400a:809::200e): icmp_seq=2 ttl=57 time=6.26 ms
                         let size = ipv4_packet.payload().len();
-                        //let source = ipv4_packet.get_source();
                         let seq = reply.get_sequence_number();
                         let ttl = ipv4_packet.get_ttl();
                         let now: u128 = self.start_instant.elapsed().as_nanos();
-                        //debug!("{:?}", (reply.get_identifier(), seq, x, e));
-                        //let t: f64 = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_micros() as f64;
-                        //println!("[{:.6}] {} bytes from {} ({}): icmp_seq={} ttl={} time={:?}", t/1000_000., size, addr, source, seq, ttl, e);
                         s.send(UniPacket::RecvPacket { 
-                            //addr: source.to_string(),
                             seq,
                             ident: reply.get_identifier(),
                             t: now,
@@ -267,11 +200,6 @@ impl PingTargets {
                 }
             }
             }
-
-            // let icmp_packet = IcmpPacket::new(&packet[..num]);
-            // if let Some(icmp_packet) = icmp_packet {
-            //     debug!("ICMP {:?}", icmp_packet);
-            // }
         }
 
         pub fn poll(&self, s: &Sender<UniPacket>) -> Result<(), Box<dyn Error>> {
@@ -290,7 +218,6 @@ impl PingTargets {
                 poll.poll(&mut events, None).unwrap();
 
                 for event in events.iter() {
-                    //debug!("{:?}", event);
                     match event.token() {
                         PING_V6 => {
                             loop {
@@ -307,7 +234,6 @@ impl PingTargets {
                             }
                         }
                         PING => {
-                            //debug!("ping {:?}", event);
                             loop {
                                 let mut packet = [0u8;2048]; 
                                 match self.ping.recv(&mut packet) {
@@ -356,7 +282,7 @@ impl PingTargets {
                     let site = Site {
                         host: host.to_string(),
                         ident: process::id() as u16 + i as u16,
-                        sock_addr: sock_addr,
+                        sock_addr
                     };
                     result.sources.insert(site.ident.clone(), site.host.to_string());
                     result.output.push(site.clone());
@@ -367,7 +293,7 @@ impl PingTargets {
                     let site = Site {
                         host: host.to_string(),
                         ident: process::id() as u16 + i as u16,
-                        sock_addr: sock_addr,
+                        sock_addr
                     };
                     result.sources.insert(site.ident.clone(), site.host.to_string());
                     result.output.push(site.clone());
