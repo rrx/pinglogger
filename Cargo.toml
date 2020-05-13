@@ -22,6 +22,7 @@ log = "0.4.8"
 crossbeam-channel = "0.4.2"
 simple_logger = "1.6.0"
 nix = "0.17.0"
+slugify = "0.1.0"
 
 [[bin]]
 name = "pinglogger"
